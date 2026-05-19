@@ -1,0 +1,39 @@
+# Node
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output
+dist/
+build/
+*.exe
+*.tsbuildinfo
+
+# Per-demo build artifacts (intentional — each demo rebuilds locally)
+demos/*/dist/
+demos/*/node_modules/
+
+# Profile / runtime artifacts written by WinNetPro itself
+profiles/
+profiles.json
+logs/
+rollback/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Env / secrets
+.env
+.env.local
+.env.*.local

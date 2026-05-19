@@ -1,0 +1,21 @@
+{
+  "name": "winnetpro",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Agentic-engineering Hello World — Windows network-interface profile manager built from BDDs/ADRs/specs by Claude Code.",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "test": "echo \"No demos created yet. Run /create-demo to scaffold one.\" && exit 0",
+    "typecheck": "echo \"No demos created yet. Run /create-demo to scaffold one.\" && exit 0",
+    "check": "pnpm typecheck && pnpm test"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "tsx": "^4.19.0",
+    "@types/node": "^22.0.0"
+  }
+}
