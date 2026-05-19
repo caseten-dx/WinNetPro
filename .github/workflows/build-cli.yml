@@ -64,62 +64,83 @@ jobs:
       - name: Smoke test (no args -> exit 2 + usage)
         shell: pwsh
         run: |
-          # GH Actions pwsh defaults to $PSNativeCommandUseErrorActionPreference = $true,
-          # which turns *any* non-zero exit from a native command into a terminating
-          # error before our own assertions can run. The CLI legitimately exits 2 on
-          # a no-args invocation, so opt out for this step.
-          $PSNativeCommandUseErrorActionPreference = $false
-          $exe = "demos/001-save-and-dry-run-cli/dist/WinNetPro-CLI-demo-001.exe"
-          $output = & $exe 2>&1 | Out-String
-          $code = $LASTEXITCODE
+          # Use Start-Process with file redirects instead of `& $exe 2>&1`. The
+          # pipeline form interacts badly with GH Actions' pwsh defaults
+          # (ErrorActionPreference=Stop + PSNativeCommandUseErrorActionPreference)
+          # and can fail the step even after successful assertions. Start-Process
+          # bypasses all of that — we read $proc.ExitCode and the captured files
+          # directly, then exit explicitly.
+          $exe = (Resolve-Path "demos/001-save-and-dry-run-cli/dist/WinNetPro-CLI-demo-001.exe").Path
+          $stdoutFile = New-TemporaryFile
+          $stderrFile = New-TemporaryFile
+          $proc = Start-Process -FilePath $exe `
+            -NoNewWindow -Wait -PassThru `
+            -RedirectStandardOutput $stdoutFile `
+            -RedirectStandardError $stderrFile
+          $code = $proc.ExitCode
+          $stdout = Get-Content $stdoutFile -Raw
+          $stderr = Get-Content $stderrFile -Raw
           Write-Host "exit code: $code"
-          Write-Host "----- output -----"
-          Write-Host $output
+          Write-Host "----- stdout -----"
+          Write-Host $stdout
+          Write-Host "----- stderr -----"
+          Write-Host $stderr
           Write-Host "------------------"
           if ($code -ne 2) {
-            Write-Error "Expected exit 2 from no-args run, got $code"
+            Write-Host "::error::Expected exit 2 from no-args run, got $code"
             exit 1
           }
-          if ($output -notmatch 'Usage:') {
-            Write-Error "Expected 'Usage:' in output"
+          if ($stderr -notmatch 'Usage:') {
+            Write-Host "::error::Expected 'Usage:' in stderr"
             exit 1
           }
+          exit 0
 
       - name: Smoke test (profiles save against bundled fixture)
         shell: pwsh
         run: |
-          # Match the no-args step — keep native non-zero exits out of pwsh's
-          # terminating-error path; we assert on $LASTEXITCODE ourselves.
-          $PSNativeCommandUseErrorActionPreference = $false
           $exe = (Resolve-Path "demos/001-save-and-dry-run-cli/dist/WinNetPro-CLI-demo-001.exe").Path
           $fixtureDir = (Resolve-Path "demos/001-save-and-dry-run-cli/fixtures").Path
-          $configDir = New-Item -ItemType Directory -Path "$env:RUNNER_TEMP/winnetpro-ci-config" -Force
-          $output = & $exe profiles save `
-            --name ci-smoke `
-            --from-adapter ad-02 `
-            --ipv4-mode dhcp `
-            --config-dir $configDir.FullName `
-            --fixture-dir $fixtureDir `
-            --json 2>&1 | Out-String
-          $code = $LASTEXITCODE
+          $configDir = (New-Item -ItemType Directory -Path "$env:RUNNER_TEMP/winnetpro-ci-config" -Force).FullName
+          $stdoutFile = New-TemporaryFile
+          $stderrFile = New-TemporaryFile
+          $args = @(
+            'profiles', 'save',
+            '--name', 'ci-smoke',
+            '--from-adapter', 'ad-02',
+            '--ipv4-mode', 'dhcp',
+            '--config-dir', $configDir,
+            '--fixture-dir', $fixtureDir,
+            '--json'
+          )
+          $proc = Start-Process -FilePath $exe -ArgumentList $args `
+            -NoNewWindow -Wait -PassThru `
+            -RedirectStandardOutput $stdoutFile `
+            -RedirectStandardError $stderrFile
+          $code = $proc.ExitCode
+          $stdout = Get-Content $stdoutFile -Raw
+          $stderr = Get-Content $stderrFile -Raw
           Write-Host "exit code: $code"
-          Write-Host "----- output -----"
-          Write-Host $output
+          Write-Host "----- stdout -----"
+          Write-Host $stdout
+          Write-Host "----- stderr -----"
+          Write-Host $stderr
           Write-Host "------------------"
           if ($code -ne 0) {
-            Write-Error "Expected exit 0 from profiles save, got $code"
+            Write-Host "::error::Expected exit 0 from profiles save, got $code"
             exit 1
           }
           try {
-            $parsed = $output | ConvertFrom-Json
+            $parsed = $stdout | ConvertFrom-Json
           } catch {
-            Write-Error "Output was not valid JSON: $($_.Exception.Message)"
+            Write-Host "::error::stdout was not valid JSON: $($_.Exception.Message)"
             exit 1
           }
           if ($parsed.name -ne 'ci-smoke') {
-            Write-Error "Expected profile name 'ci-smoke', got '$($parsed.name)'"
+            Write-Host "::error::Expected profile name 'ci-smoke', got '$($parsed.name)'"
             exit 1
           }
+          exit 0
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
