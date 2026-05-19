@@ -71,7 +71,7 @@ The architecture is therefore optimized for **two simultaneous readers**:
 - All adapters are independently testable.
 
 ### Interface
-- CLI uses `commander`. Output supports `--json` for evals.
+- CLI is the canonical surface. Output supports `--json` for evals. **Arg parsing**: `commander` is the planned library once a demo's CLI surface justifies the SEA bundle cost; demo-001 ships an inline parser per ADR-0009.
 - GUI is Electron. It calls the same application services as the CLI. The GUI must contain **zero** Windows-network logic.
 
 ## Per-demo source-tree pattern (ADR-0007)
