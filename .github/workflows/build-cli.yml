@@ -1,0 +1,123 @@
+name: Build CLI .exe (demo-001)
+
+# Produces the WinNetPro-CLI-demo-001.exe artifact on a Windows runner.
+# This is the anchor artifact for demo-001 — a runnable single-file binary
+# the audience can download and execute. Builds the Node SEA pipeline on
+# windows-latest so the .exe targets Windows regardless of where Claude Code
+# is driving from. Upload-artifact retains it for 30 days.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'demos/001-save-and-dry-run-cli/**'
+      - 'scripts/build-cli-sea.mjs'
+      - '.github/workflows/build-cli.yml'
+      - 'pnpm-lock.yaml'
+      - 'tsconfig.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck (demo-001)
+        run: pnpm --filter demo-001 typecheck
+
+      - name: Test (demo-001)
+        run: pnpm --filter demo-001 test
+
+      - name: Build CLI .exe
+        run: pnpm --filter demo-001 build:cli
+
+      - name: Verify .exe exists
+        shell: pwsh
+        run: |
+          $exe = "demos/001-save-and-dry-run-cli/dist/WinNetPro-CLI-demo-001.exe"
+          if (!(Test-Path $exe)) {
+            Write-Error "Missing $exe"
+            exit 1
+          }
+          Get-Item $exe | Select-Object Name, Length, LastWriteTime | Format-List
+
+      - name: Smoke test (no args -> exit 2 + usage)
+        shell: pwsh
+        run: |
+          $exe = "demos/001-save-and-dry-run-cli/dist/WinNetPro-CLI-demo-001.exe"
+          $output = & $exe 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          Write-Host "exit code: $code"
+          Write-Host "----- output -----"
+          Write-Host $output
+          Write-Host "------------------"
+          if ($code -ne 2) {
+            Write-Error "Expected exit 2 from no-args run, got $code"
+            exit 1
+          }
+          if ($output -notmatch 'Usage:') {
+            Write-Error "Expected 'Usage:' in output"
+            exit 1
+          }
+
+      - name: Smoke test (profiles save against bundled fixture)
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path "demos/001-save-and-dry-run-cli/dist/WinNetPro-CLI-demo-001.exe").Path
+          $fixtureDir = (Resolve-Path "demos/001-save-and-dry-run-cli/fixtures").Path
+          $configDir = New-Item -ItemType Directory -Path "$env:RUNNER_TEMP/winnetpro-ci-config" -Force
+          $output = & $exe profiles save `
+            --name ci-smoke `
+            --from-adapter ad-02 `
+            --ipv4-mode dhcp `
+            --config-dir $configDir.FullName `
+            --fixture-dir $fixtureDir `
+            --json 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          Write-Host "exit code: $code"
+          Write-Host "----- output -----"
+          Write-Host $output
+          Write-Host "------------------"
+          if ($code -ne 0) {
+            Write-Error "Expected exit 0 from profiles save, got $code"
+            exit 1
+          }
+          try {
+            $parsed = $output | ConvertFrom-Json
+          } catch {
+            Write-Error "Output was not valid JSON: $($_.Exception.Message)"
+            exit 1
+          }
+          if ($parsed.name -ne 'ci-smoke') {
+            Write-Error "Expected profile name 'ci-smoke', got '$($parsed.name)'"
+            exit 1
+          }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WinNetPro-CLI-demo-001
+          path: demos/001-save-and-dry-run-cli/dist/WinNetPro-CLI-demo-001.exe
+          if-no-files-found: error
+          retention-days: 30
