@@ -64,6 +64,11 @@ jobs:
       - name: Smoke test (no args -> exit 2 + usage)
         shell: pwsh
         run: |
+          # GH Actions pwsh defaults to $PSNativeCommandUseErrorActionPreference = $true,
+          # which turns *any* non-zero exit from a native command into a terminating
+          # error before our own assertions can run. The CLI legitimately exits 2 on
+          # a no-args invocation, so opt out for this step.
+          $PSNativeCommandUseErrorActionPreference = $false
           $exe = "demos/001-save-and-dry-run-cli/dist/WinNetPro-CLI-demo-001.exe"
           $output = & $exe 2>&1 | Out-String
           $code = $LASTEXITCODE
@@ -83,6 +88,9 @@ jobs:
       - name: Smoke test (profiles save against bundled fixture)
         shell: pwsh
         run: |
+          # Match the no-args step — keep native non-zero exits out of pwsh's
+          # terminating-error path; we assert on $LASTEXITCODE ourselves.
+          $PSNativeCommandUseErrorActionPreference = $false
           $exe = (Resolve-Path "demos/001-save-and-dry-run-cli/dist/WinNetPro-CLI-demo-001.exe").Path
           $fixtureDir = (Resolve-Path "demos/001-save-and-dry-run-cli/fixtures").Path
           $configDir = New-Item -ItemType Directory -Path "$env:RUNNER_TEMP/winnetpro-ci-config" -Force
