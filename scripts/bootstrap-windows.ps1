@@ -24,6 +24,14 @@
 
 $ErrorActionPreference = 'Stop'
 
+# Windows PowerShell 5.1's default execution policy is Restricted: inline
+# expressions (`irm | iex`) work, but loading .ps1 files from disk is blocked.
+# Some commands we depend on (npm.ps1 in particular — `npm` on Windows is a
+# PowerShell wrapper script) need to be loaded as files. Process-scope bypass
+# only affects this PowerShell process and reverts when it exits — no
+# persistent system change.
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+
 Write-Host ""
 Write-Host "=== WinNetPro Windows VM bootstrap ==="
 Write-Host ""
