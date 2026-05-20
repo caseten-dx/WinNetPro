@@ -1,0 +1,97 @@
+# Bootstraps a fresh Windows 11 VM for WinNetPro smoke-testing.
+#
+# What this does, in order:
+#   1. Installs the OpenSSH Server feature and opens the firewall rule so the
+#      Mac (or any other tailnet peer) can ssh in.
+#   2. Installs the dev toolchain via winget: Git, PowerShell 7, Node.js
+#      (current channel = 24), and Tailscale.
+#   3. Reloads PATH in this session so the just-installed binaries resolve.
+#   4. Installs pnpm 9 globally via npm (matches the repo's packageManager).
+#   5. Points OpenSSH at PowerShell 7 as the default shell.
+#   6. Ensures C:\ProgramData\ssh\administrators_authorized_keys exists and
+#      is locked down — this is the right place for SSH keys on an account
+#      that's in the Administrators group.
+#   7. Brings Tailscale up (opens a browser for SSO sign-in) and prints the
+#      VM's tailnet IP for use in the Mac's ~/.ssh/config.
+#
+# Designed to be paste-resistant: run it via
+#   irm https://raw.githubusercontent.com/caseten-dx/WinNetPro/main/scripts/bootstrap-windows.ps1 | iex
+# from a Win11 admin Terminal. Idempotent: safe to re-run if a step fails.
+#
+# This script is environment setup for *testing* WinNetPro demo binaries on
+# Windows. It is not part of the product. See conversation context in the
+# session that produced commit history for details on why this lives here.
+
+$ErrorActionPreference = 'Stop'
+
+Write-Host ""
+Write-Host "=== WinNetPro Windows VM bootstrap ==="
+Write-Host ""
+
+# --- 1. OpenSSH Server ---
+Write-Host "[1/7] Installing OpenSSH Server..."
+Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0 | Out-Null
+Start-Service sshd
+Set-Service -Name sshd -StartupType Automatic
+
+if (-not (Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue)) {
+  New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (sshd)' `
+    -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22 | Out-Null
+}
+
+# --- 2. Dev toolchain + Tailscale via winget ---
+Write-Host "[2/7] Updating winget sources..."
+winget source update | Out-Null
+
+Write-Host "[3/7] Installing Git, PowerShell 7, Node.js, Tailscale (may take several minutes)..."
+$pkgs = @(
+  'Git.Git',
+  'Microsoft.PowerShell',
+  'OpenJS.NodeJS',
+  'tailscale.tailscale'
+)
+foreach ($pkg in $pkgs) {
+  Write-Host "  - $pkg"
+  winget install --id $pkg -e --silent --accept-package-agreements --accept-source-agreements
+}
+
+# --- 3. Reload PATH in this session ---
+$env:Path = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' +
+            [System.Environment]::GetEnvironmentVariable('Path','User')
+
+# --- 4. pnpm via npm ---
+Write-Host "[4/7] Installing pnpm 9..."
+npm install -g pnpm@9
+
+# --- 5. Default SSH shell = PowerShell 7 ---
+Write-Host "[5/7] Setting OpenSSH default shell to PowerShell 7..."
+$pwsh = 'C:\Program Files\PowerShell\7\pwsh.exe'
+if (Test-Path $pwsh) {
+  New-ItemProperty -Path 'HKLM:\SOFTWARE\OpenSSH' -Name DefaultShell `
+    -Value $pwsh -PropertyType String -Force | Out-Null
+} else {
+  Write-Warning "  PowerShell 7 not found at $pwsh; OpenSSH will use Windows PowerShell 5 by default."
+}
+
+# --- 6. Admin authorized_keys ---
+Write-Host "[6/7] Preparing administrators_authorized_keys..."
+$adminKeys = 'C:\ProgramData\ssh\administrators_authorized_keys'
+$adminKeysDir = Split-Path $adminKeys -Parent
+if (-not (Test-Path $adminKeysDir)) { New-Item -ItemType Directory -Path $adminKeysDir -Force | Out-Null }
+if (-not (Test-Path $adminKeys))    { New-Item -ItemType File      -Path $adminKeys    -Force | Out-Null }
+icacls $adminKeys /inheritance:r /grant 'Administrators:F' /grant 'SYSTEM:F' | Out-Null
+
+# --- 7. Tailscale up ---
+Write-Host "[7/7] Bringing Tailscale up..."
+Start-Service Tailscale -ErrorAction SilentlyContinue
+& 'C:\Program Files\Tailscale\tailscale.exe' up
+
+Write-Host ""
+Write-Host "=== Bootstrap complete ==="
+Write-Host ""
+Write-Host "Windows VM Tailscale IP (paste into the Mac's ~/.ssh/config):"
+& 'C:\Program Files\Tailscale\tailscale.exe' ip -4
+Write-Host ""
+Write-Host "Next: on the Mac, copy your pubkey into:"
+Write-Host "  $adminKeys"
+Write-Host ""
