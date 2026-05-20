@@ -78,10 +78,16 @@ if (Test-Path $tsExe) {
   Write-Host "  - Tailscale (already installed; skipping MSI step)"
 } else {
   Write-Host "  - Tailscale (direct MSI from pkgs.tailscale.com)"
-  $tsArch = switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()) {
-    'Arm64' { 'arm64' }
-    'X64'   { 'amd64' }
-    default { throw "Unsupported architecture: $_ (expected Arm64 or X64)" }
+  # $env:PROCESSOR_ARCHITECTURE is reliable since NT 3.1 and works
+  # identically in Windows PowerShell 5.1 and PowerShell 7. The
+  # [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+  # static returns null under PS 5.1 (it's a .NET Core / .NET 5+ API),
+  # so .ToString() on it throws InvokeMethodOnNull.
+  $procArch = $env:PROCESSOR_ARCHITECTURE
+  $tsArch = switch ($procArch) {
+    'ARM64' { 'arm64' }
+    'AMD64' { 'amd64' }
+    default { throw "Unsupported PROCESSOR_ARCHITECTURE: '$procArch' (expected ARM64 or AMD64)" }
   }
   # Parse the public stable index for the latest versioned MSI filename.
   $indexHtml = (Invoke-WebRequest 'https://pkgs.tailscale.com/stable/' -UseBasicParsing).Content
