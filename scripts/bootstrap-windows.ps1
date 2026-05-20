@@ -44,6 +44,15 @@ Write-Host "[2/7] Updating winget sources..."
 winget source update | Out-Null
 
 Write-Host "[3/7] Installing Git, PowerShell 7, Node.js, Tailscale (may take several minutes)..."
+# Force --source winget on every install. The msstore source has a known
+# certificate validation issue on fresh ARM Win11 installs (0x8a15005e),
+# and even when it just fails to search, winget refuses to pick a source
+# automatically when a package exists in both winget and msstore — it
+# asks for --source explicitly. All four packages below live in the
+# winget-community repo, so winget is the right (and only) source.
+# winget install exit codes:
+#   0           = success
+#   -1978335189 = already installed (treat as success)
 $pkgs = @(
   'Git.Git',
   'Microsoft.PowerShell',
@@ -52,7 +61,12 @@ $pkgs = @(
 )
 foreach ($pkg in $pkgs) {
   Write-Host "  - $pkg"
-  winget install --id $pkg -e --silent --accept-package-agreements --accept-source-agreements
+  winget install --id $pkg --source winget -e --silent `
+    --accept-package-agreements --accept-source-agreements
+  $code = $LASTEXITCODE
+  if ($code -ne 0 -and $code -ne -1978335189) {
+    throw "winget install of $pkg failed (exit $code). Re-run the bootstrap; winget is usually transient."
+  }
 }
 
 # --- 3. Reload PATH in this session ---
@@ -61,7 +75,13 @@ $env:Path = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';'
 
 # --- 4. pnpm via npm ---
 Write-Host "[4/7] Installing pnpm 9..."
+if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+  throw "npm not found after Node install — winget likely failed silently. Re-run the bootstrap or check 'winget list OpenJS.NodeJS'."
+}
 npm install -g pnpm@9
+if ($LASTEXITCODE -ne 0) {
+  throw "pnpm install failed (npm exit $LASTEXITCODE)."
+}
 
 # --- 5. Default SSH shell = PowerShell 7 ---
 Write-Host "[5/7] Setting OpenSSH default shell to PowerShell 7..."
