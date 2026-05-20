@@ -43,12 +43,12 @@ if (-not (Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction Silentl
 Write-Host "[2/7] Updating winget sources..."
 winget source update | Out-Null
 
-Write-Host "[3/7] Installing Git, PowerShell 7, Node.js, Tailscale (may take several minutes)..."
+Write-Host "[3/7] Installing Git, PowerShell 7, Node.js via winget (may take several minutes)..."
 # Force --source winget on every install. The msstore source has a known
 # certificate validation issue on fresh ARM Win11 installs (0x8a15005e),
 # and even when it just fails to search, winget refuses to pick a source
 # automatically when a package exists in both winget and msstore — it
-# asks for --source explicitly. All four packages below live in the
+# asks for --source explicitly. All three packages below live in the
 # winget-community repo, so winget is the right (and only) source.
 # winget install exit codes:
 #   0           = success
@@ -56,8 +56,7 @@ Write-Host "[3/7] Installing Git, PowerShell 7, Node.js, Tailscale (may take sev
 $pkgs = @(
   'Git.Git',
   'Microsoft.PowerShell',
-  'OpenJS.NodeJS',
-  'tailscale.tailscale'
+  'OpenJS.NodeJS'
 )
 foreach ($pkg in $pkgs) {
   Write-Host "  - $pkg"
@@ -67,6 +66,41 @@ foreach ($pkg in $pkgs) {
   if ($code -ne 0 -and $code -ne -1978335189) {
     throw "winget install of $pkg failed (exit $code). Re-run the bootstrap; winget is usually transient."
   }
+}
+
+# Tailscale: direct MSI download. The winget tailscale.tailscale manifest
+# is amd64-only — installing it on an ARM64 Windows VM fails with exit
+# code -1978335212 (APPINSTALLER_CLI_ERROR_NO_APPLICATIONS_FOUND).
+# Tailscale's own pkgs.tailscale.com index serves arm64 MSIs, so we
+# fetch the latest stable filename out of the HTML index and msiexec it.
+$tsExe = 'C:\Program Files\Tailscale\tailscale.exe'
+if (Test-Path $tsExe) {
+  Write-Host "  - Tailscale (already installed; skipping MSI step)"
+} else {
+  Write-Host "  - Tailscale (direct MSI from pkgs.tailscale.com)"
+  $tsArch = switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()) {
+    'Arm64' { 'arm64' }
+    'X64'   { 'amd64' }
+    default { throw "Unsupported architecture: $_ (expected Arm64 or X64)" }
+  }
+  # Parse the public stable index for the latest versioned MSI filename.
+  $indexHtml = (Invoke-WebRequest 'https://pkgs.tailscale.com/stable/' -UseBasicParsing).Content
+  $msiMatch = [regex]::Match($indexHtml, "tailscale-setup-(\d+\.\d+\.\d+)-$tsArch\.msi")
+  if (-not $msiMatch.Success) {
+    throw "Could not find a Tailscale $tsArch MSI in pkgs.tailscale.com/stable"
+  }
+  $tsMsiFile = $msiMatch.Value
+  $tsMsiUrl = "https://pkgs.tailscale.com/stable/$tsMsiFile"
+  $tsMsiPath = Join-Path $env:TEMP $tsMsiFile
+  Write-Host "    Downloading $tsMsiUrl"
+  Invoke-WebRequest -Uri $tsMsiUrl -OutFile $tsMsiPath -UseBasicParsing
+  Write-Host "    Running msiexec /quiet /norestart /i ..."
+  $msiProc = Start-Process msiexec.exe -Wait -PassThru `
+    -ArgumentList '/quiet','/norestart','/i',"`"$tsMsiPath`""
+  if ($msiProc.ExitCode -ne 0) {
+    throw "Tailscale MSI install failed (msiexec exit $($msiProc.ExitCode))"
+  }
+  Remove-Item $tsMsiPath -Force -ErrorAction SilentlyContinue
 }
 
 # --- 3. Reload PATH in this session ---
@@ -103,14 +137,17 @@ icacls $adminKeys /inheritance:r /grant 'Administrators:F' /grant 'SYSTEM:F' | O
 
 # --- 7. Tailscale up ---
 Write-Host "[7/7] Bringing Tailscale up..."
+if (-not (Test-Path $tsExe)) {
+  throw "Tailscale binary missing at $tsExe — MSI install step did not produce it."
+}
 Start-Service Tailscale -ErrorAction SilentlyContinue
-& 'C:\Program Files\Tailscale\tailscale.exe' up
+& $tsExe up
 
 Write-Host ""
 Write-Host "=== Bootstrap complete ==="
 Write-Host ""
 Write-Host "Windows VM Tailscale IP (paste into the Mac's ~/.ssh/config):"
-& 'C:\Program Files\Tailscale\tailscale.exe' ip -4
+& $tsExe ip -4
 Write-Host ""
 Write-Host "Next: on the Mac, copy your pubkey into:"
 Write-Host "  $adminKeys"
