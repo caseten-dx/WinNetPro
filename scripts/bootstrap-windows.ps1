@@ -24,13 +24,16 @@
 
 $ErrorActionPreference = 'Stop'
 
-# Windows PowerShell 5.1's default execution policy is Restricted: inline
-# expressions (`irm | iex`) work, but loading .ps1 files from disk is blocked.
-# Some commands we depend on (npm.ps1 in particular — `npm` on Windows is a
-# PowerShell wrapper script) need to be loaded as files. Process-scope bypass
-# only affects this PowerShell process and reverts when it exits — no
-# persistent system change.
+# Windows PowerShell 5.1's default execution policy is Restricted, which
+# blocks loading any .ps1 file from disk. Two scopes matter:
+#   - Process: needed inside this bootstrap so it can call npm.ps1
+#     (`npm` on Windows is a PowerShell wrapper script).
+#   - LocalMachine: needed so future SSH sessions (and any other shell)
+#     can also call pnpm.ps1, npm.ps1, etc. RemoteSigned is the standard
+#     dev-host default: allows locally-created .ps1 files to run while
+#     still requiring signatures on internet-downloaded scripts.
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+Set-ExecutionPolicy -Scope LocalMachine -ExecutionPolicy RemoteSigned -Force
 
 Write-Host ""
 Write-Host "=== WinNetPro Windows VM bootstrap ==="
@@ -131,15 +134,23 @@ if ($LASTEXITCODE -ne 0) {
   throw "pnpm install failed (npm exit $LASTEXITCODE)."
 }
 
-# --- 5. Default SSH shell = PowerShell 7 ---
-Write-Host "[5/7] Setting OpenSSH default shell to PowerShell 7..."
-$pwsh = 'C:\Program Files\PowerShell\7\pwsh.exe'
-if (Test-Path $pwsh) {
-  New-ItemProperty -Path 'HKLM:\SOFTWARE\OpenSSH' -Name DefaultShell `
-    -Value $pwsh -PropertyType String -Force | Out-Null
-} else {
-  Write-Warning "  PowerShell 7 not found at $pwsh; OpenSSH will use Windows PowerShell 5 by default."
+# --- 5. Default SSH shell = Windows PowerShell 5.1 ---
+# We point OpenSSH at Windows PowerShell 5.1 because its path is fixed
+# and guaranteed-present on every Win10/11 install. The winget-installed
+# Microsoft.PowerShell (pwsh 7) on ARM64 Windows lands in a per-user
+# WindowsApps App Execution Alias path that varies by username and isn't
+# a real binary — pointing OpenSSH at it is fragile. PS 5.1 is older but
+# fully sufficient for our use: `;`-separated commands, pnpm/npm/git,
+# the WinNetPro test + build pipeline. If a future demo needs pwsh 7
+# specifically, that's the moment to revisit.
+Write-Host "[5/7] Setting OpenSSH DefaultShell to Windows PowerShell 5.1..."
+$openSshKey = 'HKLM:\SOFTWARE\OpenSSH'
+if (-not (Test-Path $openSshKey)) {
+  New-Item -Path $openSshKey -Force | Out-Null
 }
+New-ItemProperty -Path $openSshKey -Name DefaultShell `
+  -Value 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' `
+  -PropertyType String -Force | Out-Null
 
 # --- 6. Admin authorized_keys ---
 Write-Host "[6/7] Preparing administrators_authorized_keys..."
