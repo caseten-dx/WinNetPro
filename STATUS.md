@@ -2,7 +2,7 @@
 
 ## Current phase
 
-**Phase 1 — Demo 001 complete end-to-end.** CLI source + 50 tests + BDD evidence + `.exe` artifact via CI all landed. First green windows-latest run produces `WinNetPro-CLI-demo-001.exe` (~108 MB) in 59 s and uploads it as a 30-day artifact. Awaiting user smoke-test on a Windows laptop.
+**Phase 1 — Demo 001 complete end-to-end, locally testable on Windows from the Mac.** Beyond the CI `.exe` pipeline that landed last session, this session added a Mac-driven local Windows ARM VM (UTM + Tailscale + SSH) as a second testing surface — the same `pnpm install`, `pnpm --filter demo-001 check`, `pnpm --filter demo-001 build:cli` cycle now runs on real Windows from this Mac terminal, no UTM-window context-switching needed. Demo-001 is closed-out as testable; demo-002 is the next scoping conversation.
 
 ## Current focus
 
@@ -10,13 +10,14 @@ Active demo: **`demos/001-save-and-dry-run-cli/`** until smoke-test feedback com
 
 What landed (cumulative):
 - `src/` tree: `domain/` (types, validation, matching per ADR-0006, profile-id), `application/` (ports, `SaveProfile`, `BuildDryRunPlan`), `infrastructure/` (`FakeProvider`, `JsonProfileRepository`, `SystemClock` + `fixedClock`), `cli/` (`run()` canonical surface, `index.ts` real entry, tiny inline arg parser per ADR-0009, `profiles save` + `profiles apply` commands).
-- 50 tests across `tests/unit/` and `tests/bdd/`. Plus 2 CI smoke tests against the produced `.exe`: no-args → exit 2 + `Usage:` in stderr; `profiles save --json` against bundled fixture → exit 0 + valid JSON.
+- 50 tests across `tests/unit/` and `tests/bdd/`. Plus 2 CI smoke tests against the produced `.exe`: no-args → exit 2 + `Usage:` in stderr; `profiles save --json` against bundled fixture → exit 0 + valid JSON. The same surface is also verified end-to-end on Windows ARM in the local VM.
 - Evidence files at `demos/001-save-and-dry-run-cli/evidence/profile-save.md` and `profile-apply-dry-run.md`.
-- Build pipeline: `scripts/build-cli-sea.mjs` runs esbuild → Node SEA blob → copy node binary → postject inject. Local Mac build at 9.1 s; CI Windows build at ~30 s of the 59 s total.
+- Build pipeline: `scripts/build-cli-sea.mjs` runs esbuild → Node SEA blob → copy node binary → postject inject. Local Mac build at 9.1 s; CI Windows build at ~30 s of the 59 s total; VM Windows ARM build at ~26.5 s.
 - CI: `.github/workflows/build-cli.yml` on `windows-latest`, Node 24, pnpm 9 (read from root `packageManager`), explicit `permissions: contents: read`, artifact uploaded with 30-day retention.
+- Local Windows VM dev surface: `scripts/bootstrap-windows.ps1` provisions a fresh Win11 ARM VM with one PowerShell line. SSH from Mac into the VM via Tailscale; repo lives at `C:\Users\mgilmore\Developer\WinNetPro` to mirror `~/Developer/WinNetPro`.
 
 Next work, in order:
-1. User smoke-tests `WinNetPro-CLI-demo-001.exe` on a Windows laptop and reports back any Windows-specific issues (path handling, fixture resolution, line endings).
+1. User smoke-tests `WinNetPro-CLI-demo-001.exe` on a Windows laptop and reports back any Windows-specific issues (path handling, fixture resolution, line endings). The local VM run already validates Windows ARM; this confirms x64 audience-target behavior.
 2. Demo-002 scoping (see Carry-forward).
 
 ## Carry-forward for demo-002 (do not lose)
@@ -28,10 +29,30 @@ Next work, in order:
 
 ## Open questions
 
-- (Resolved this session) macOS host vs Node SEA cross-target — answer: GH Actions `windows-latest` is the build target; Mac is used only for local sanity checks.
 - **SHA-pinning of GH Actions vs floating `@v4` tags.** Arch-reviewer flagged the floating-tag posture in `build-cli.yml`. Deferred per teaching-repo readability tradeoff; revisit if the repo grows beyond demo scope or if a supply-chain incident hits one of the upstream actions.
+- **Audience-target architecture mismatch on local VM `.exe`.** The local Win11 ARM VM produces ARM64 `.exe` binaries; the audience demo machines are almost certainly x64. Local VM is for fast feedback only; the shippable `.exe` continues to come from GH Actions `windows-latest` (x64). No action needed unless a future demo needs ARM-targeted audience binaries.
 
 ## Recent sessions (rolling 5)
+
+### 2026-05-20 — Local Windows ARM VM as a Mac-driven development surface
+
+- **Goal:** Stand up a local Windows VM that this Mac session can fully drive over SSH — clone, install, test, build, smoke — without ever clicking into the VM's console. The CI `.exe` pipeline from the previous session covers the audience-shippable artifact; a local VM closes the inner feedback loop (no GH Actions roundtrip for "does this still work on Windows?" checks) and lays groundwork for demo-002's GUI development where iterating on Electron locally is essential.
+- **Source:** User asked the broader "Windows-from-Mac" question. Surveyed VPS options (Vultr, Azure B-series, Hetzner with Win11 ISO + TPM bypass) and one-click Windows Server paths (AWS Lightsail, Windows 365 Cloud PC). User chose **local UTM + Windows 11 ARM** on Apple Silicon: free, no monthly bill, near-native performance via QEMU/hvf. The Apple-Silicon-vs-x64 gotcha is documented (`.exe` produced inside the VM is ARM64 → audience binaries still come from GH Actions). For Mac↔VM networking, user hit UTM's removed port-forwarding UI in current versions, pivoted to Tailscale.
+- **Done:**
+  - **`scripts/bootstrap-windows.ps1`** (new) — single PowerShell file that turns a fresh Win11 ARM VM into a ready-to-SSH dev host with one line: `irm <raw-url> | iex`. Idempotent. Seven numbered phases: OpenSSH Server install + firewall, winget toolchain (Git, PowerShell 7, Node.js), Tailscale via direct MSI from `pkgs.tailscale.com/stable/` (winget's `tailscale.tailscale` manifest is amd64-only), `pnpm@9` via npm, `OpenSSH DefaultShell` → `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`, machine-wide `administrators_authorized_keys` plumbing, `tailscale up` for browser SSO. Iterated through six failure modes before green:
+    1. `pnpm/action-setup@v4` Multiple-Versions conflict on first CI run — fixed by dropping `version: 9` in favor of the root `packageManager` (last-session work, but the same pattern).
+    2. Bootstrap pass 1: `msstore` certificate `0x8a15005e` → winget refused to disambiguate between sources when packages exist in both. Fixed with `--source winget` on every install and `$LASTEXITCODE` checks after each.
+    3. Bootstrap pass 2: `tailscale.tailscale` exit `-1978335212` (`NO_APPLICATIONS_FOUND`) — winget manifest has no ARM64 entry. Replaced with direct-MSI install: parse latest versioned filename from the `pkgs.tailscale.com/stable/` HTML index, `msiexec /quiet /norestart /i`.
+    4. Bootstrap pass 3: `InvokeMethodOnNull` at `[System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()` — that .NET Core API returns `$null` under Windows PowerShell 5.1 (the OOBE default shell). Replaced with `$env:PROCESSOR_ARCHITECTURE` which has been stable since NT 3.1.
+    5. Bootstrap pass 4: `npm.ps1 cannot be loaded because running scripts is disabled` — Windows PowerShell 5.1's default ExecutionPolicy is `Restricted`. Added `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force` at the top of the script.
+    6. Bootstrap pass 5: `DefaultShell` registry value never wrote because `Test-Path 'C:\Program Files\PowerShell\7\pwsh.exe'` returned false — winget Microsoft.PowerShell on ARM64 Windows installs to a per-user WindowsApps App Execution Alias path that varies by username. Switched DefaultShell target to the fixed-path Windows PowerShell 5.1, and added `Set-ExecutionPolicy -Scope LocalMachine -ExecutionPolicy RemoteSigned -Force` so SSH sessions (not just the bootstrap process) can load .ps1 files.
+  - **Mac-side Tailscale.** Installed via brew cask; GUI "Add Account" flow failed with "Unable to add new user" due to a sandboxed-keychain quirk; recovered via CLI `tailscale login`. macOS Sequoia required approving the Tailscale system extension (System Settings → General → Login Items & Extensions → Network Extensions). Mac at `100.83.43.52`.
+  - **SSH from Mac to VM.** `~/.ssh/winnetpro_vm` keypair generated previously; `~/.ssh/config` `Host winvm` block added (HostName 100.71.232.112, User mgilmore, IdentityFile, IdentitiesOnly). Mac pubkey appended to VM's `C:\ProgramData\ssh\administrators_authorized_keys` (machine-wide for admin accounts, so any admin SSH user resolves to the same key). Smoke: `ssh winvm 'whoami; node --version; pnpm --version; git --version; tailscale ip -4'` returns clean output, key-based, no password.
+  - **User migration: `Michael Gilmore` → `mgilmore`.** OOBE-created the first account as "Michael Gilmore" with a space in the username; rather than rename the profile folder (risky — Windows really doesn't want you to do that), created a new `mgilmore` local admin via `New-LocalUser`, added to Administrators group, interactive first-login at the UTM console once to provision the profile folder, then resumed SSH-driven work as `mgilmore`. Repo migrated from `C:\src\WinNetPro` to `C:\Users\mgilmore\Developer\WinNetPro` (mirrors Mac `~/Developer/WinNetPro`). Old `C:\src\` tree removed cleanly. The shared admin SSH keys file meant no key re-upload needed.
+  - **End-to-end Windows-ARM validation** (all from this Mac terminal, no UTM clicks): `git clone` → `pnpm install --frozen-lockfile` (3.4 s) → `pnpm --filter demo-001 check` (typecheck OK, **50/50 tests** in 1.7 s) → `pnpm --filter demo-001 build:cli` (**26.5 s** — under the 30 s CLAUDE.md budget, ARM64 `.exe` produced) → smoke 1 no-args → exit 2 + `Usage:` ✓ → smoke 2 `profiles save --json` against bundled fixture → exit 0 + valid JSON profile `mgilmore-smoke` ✓.
+- **Next:**
+  - User smoke-tests the GH-Actions-built x64 `WinNetPro-CLI-demo-001.exe` on a Windows laptop. The ARM VM has already proven cross-platform code correctness; this remaining test exists to catch x64-vs-ARM behavioral differences (extremely unlikely for our domain code, possible for edge-case Node SEA path resolution).
+  - Demo-002 scoping conversation: real apply pipeline + snapshot/rollback (ADR-0004 steps 9-12) + admin detection + the ADR-0006 description/alias warning emission carry-forward + the Electron GUI + parallel `build-gui.yml` workflow. With the local VM now in place, GUI iteration can happen via `pnpm electron .` on Mac for the renderer, and Windows-ARM smoke tests via the VM for native widget verification before pushing to CI.
 
 ### 2026-05-19 — Demo 001 anchor `.exe` shipping via GH Actions windows-latest
 
