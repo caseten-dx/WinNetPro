@@ -83,3 +83,81 @@ describe('formatPlan output encoding', () => {
     );
   });
 });
+
+// Smoke-test finding 3 (2026-05-20): "dhcp -> dhcp (changes)" reads
+// contradictorily. willChange=true means "mutation API will be called" — not
+// "end-state differs." Disambiguate presentationally without changing the
+// JSON shape: (no change) | (re-apply) | (changes).
+describe('formatPlan ipv4 verdict', () => {
+  it('renders (no change) when willChange is false', () => {
+    const plan = samplePlan({
+      ipv4: {
+        from: { mode: 'dhcp', address: '10.0.0.1', prefixLength: 24, gateway: '10.0.0.254' },
+        to: { mode: 'dhcp', address: null, prefixLength: null, gateway: null },
+        willChange: false,
+      },
+    });
+    const rendered = formatPlan(plan);
+    ok(
+      rendered.includes('dhcp -> dhcp (no change)'),
+      `expected (no change) verdict; got:\n${rendered}`,
+    );
+  });
+
+  it('renders (re-apply) when willChange is true but from.mode equals to.mode (DHCP -> DHCP)', () => {
+    const plan = samplePlan({
+      ipv4: {
+        from: { mode: 'dhcp', address: '10.0.0.1', prefixLength: 24, gateway: '10.0.0.254' },
+        to: { mode: 'dhcp', address: null, prefixLength: null, gateway: null },
+        willChange: true,
+      },
+    });
+    const rendered = formatPlan(plan);
+    ok(
+      rendered.includes('dhcp -> dhcp (re-apply)'),
+      `expected (re-apply) verdict for same-mode willChange=true; got:\n${rendered}`,
+    );
+    // Critically: the old "(changes)" rendering must not appear next to
+    // identical modes — that was the contradictory output smoke-test
+    // finding 3 flagged.
+    ok(
+      !rendered.includes('dhcp -> dhcp (changes)'),
+      `same-mode plan must not render "(changes)"; got:\n${rendered}`,
+    );
+  });
+
+  it('renders (re-apply) for static -> static with different values', () => {
+    const plan = samplePlan({
+      ipv4: {
+        from: { mode: 'static', address: '10.0.0.5', prefixLength: 24, gateway: '10.0.0.1' },
+        to: { mode: 'static', address: '192.168.1.5', prefixLength: 24, gateway: '192.168.1.1' },
+        willChange: true,
+      },
+    });
+    const rendered = formatPlan(plan);
+    // The describeIpv4 helper renders static <addr>/<prefix>[ gw <gw>], so the
+    // from/to values already show the actual change in-line. (re-apply) is the
+    // verdict marker — the audience reads "static 10.0.0.5/24 gw 10.0.0.1 ->
+    // static 192.168.1.5/24 gw 192.168.1.1 (re-apply)" and sees both the value
+    // change AND the same-mode marker.
+    ok(
+      rendered.includes('(re-apply)'),
+      `expected (re-apply) verdict for same-mode willChange=true (static -> static); got:\n${rendered}`,
+    );
+  });
+
+  it('renders (changes) when willChange is true and from.mode differs from to.mode', () => {
+    const plan = samplePlan({
+      ipv4: {
+        from: { mode: 'dhcp', address: '10.0.0.1', prefixLength: 24, gateway: '10.0.0.254' },
+        to: { mode: 'static', address: '192.168.1.5', prefixLength: 24, gateway: '192.168.1.1' },
+        willChange: true,
+      },
+    });
+    const rendered = formatPlan(plan);
+    ok(
+      rendered.includes('(changes)'),
+      `expected (changes) verdict for cross-mode willChange=true; got:\n${rendered}`,
+    );
+  });
+});

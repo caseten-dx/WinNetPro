@@ -67,7 +67,7 @@ export function formatPlan(plan: import('../../domain/types.js').ChangePlan): st
   lines.push(`Change plan for profile "${plan.sourceProfileId}" -> adapter "${plan.targetAdapterId}"`);
   lines.push(`  match:    ${plan.match.confidence} (${plan.match.criteria.join(', ') || 'global'})`);
   lines.push(
-    `  ipv4:     ${describeIpv4(plan.ipv4.from)} -> ${describeIpv4(plan.ipv4.to)} ${plan.ipv4.willChange ? '(changes)' : '(no change)'}`,
+    `  ipv4:     ${describeIpv4(plan.ipv4.from)} -> ${describeIpv4(plan.ipv4.to)} ${ipv4Verdict(plan.ipv4)}`,
   );
   // ASCII-only separators: '--' instead of U+2014 EM DASH, so the line renders
   // consistently across every Windows console regardless of active code page.
@@ -78,6 +78,24 @@ export function formatPlan(plan: import('../../domain/types.js').ChangePlan): st
   );
   lines.push('');
   return lines.join('\n');
+}
+
+// Three-way verdict for the IPv4 row.
+//   (no change) — willChange=false; the mutation API will not be called.
+//   (re-apply)  — willChange=true AND from.mode === to.mode; the mutation API
+//                 will run but the mode boundary is not crossed (e.g. DHCP
+//                 release/renew, or static-to-different-static within v1).
+//                 This replaces a previous "(changes)" rendering that read
+//                 contradictorily next to identical from/to modes
+//                 (smoke-test finding 3, 2026-05-20).
+//   (changes)   — willChange=true AND from.mode !== to.mode; the mode itself
+//                 is changing (DHCP -> static or vice versa).
+// The JSON ChangePlan.ipv4.willChange field keeps its existing semantic
+// ("mutation API will be called"); this is a presentational split.
+function ipv4Verdict(ipv4: import('../../domain/types.js').ChangePlan['ipv4']): string {
+  if (!ipv4.willChange) return '(no change)';
+  if (ipv4.from.mode === ipv4.to.mode) return '(re-apply)';
+  return '(changes)';
 }
 
 function describeIpv4(s: {
