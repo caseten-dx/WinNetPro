@@ -57,15 +57,22 @@ export async function runProfilesApply(
   return 0;
 }
 
-function formatPlan(plan: import('../../domain/types.js').ChangePlan): string {
+// Exported for direct unit-testing of the rendered output (notably to enforce
+// ASCII-only output, since Windows PowerShell 5.1 + cmd.exe default to OEM/ANSI
+// code pages on most installs and mojibake any non-ASCII characters the .exe
+// writes — even when the .exe itself emits valid UTF-8). The CLI surface in
+// run.ts still calls this internally.
+export function formatPlan(plan: import('../../domain/types.js').ChangePlan): string {
   const lines: string[] = [];
   lines.push(`Change plan for profile "${plan.sourceProfileId}" -> adapter "${plan.targetAdapterId}"`);
   lines.push(`  match:    ${plan.match.confidence} (${plan.match.criteria.join(', ') || 'global'})`);
   lines.push(
     `  ipv4:     ${describeIpv4(plan.ipv4.from)} -> ${describeIpv4(plan.ipv4.to)} ${plan.ipv4.willChange ? '(changes)' : '(no change)'}`,
   );
-  lines.push(`  dns:      ${plan.dns.willChange ? 'will change' : 'no change'} — ${plan.dns.reason}`);
-  lines.push(`  ipv6:     no change — ${plan.ipv6.reason}`);
+  // ASCII-only separators: '--' instead of U+2014 EM DASH, so the line renders
+  // consistently across every Windows console regardless of active code page.
+  lines.push(`  dns:      ${plan.dns.willChange ? 'will change' : 'no change'} -- ${plan.dns.reason}`);
+  lines.push(`  ipv6:     no change -- ${plan.ipv6.reason}`);
   lines.push(
     `  rollback: snapshot ${plan.rollback.snapshotWillBeCreated ? 'will be created at' : 'disabled'} ${plan.rollback.snapshotPath}`,
   );
