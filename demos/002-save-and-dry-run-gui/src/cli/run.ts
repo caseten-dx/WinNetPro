@@ -47,6 +47,20 @@ export async function run(
     return 2;
   }
 
+  // Reject unknown positional arguments. The parser collects everything beyond
+  // command + subcommand into parsed.positionals[]; no current command (save,
+  // apply) accepts positionals. Silently swallowing them is a footgun — surfaced
+  // by the x64 smoke harness when PowerShell 5.1 Start-Process did not quote
+  // --description "lab bench", which then arrived at the .exe as
+  // --description=lab + positional 'bench', with 'bench' silently dropped.
+  // A future command that accepts positionals would relax this in its own
+  // handler, not here.
+  if (parsed.positionals.length > 0) {
+    streams.stderr.write(`unknown argument: ${parsed.positionals[0]}\n`);
+    streams.stderr.write(usage());
+    return 2;
+  }
+
   const configDir = resolve(streams.cwd(), parsed.flags.get('--config-dir') ?? '.');
   const fixtureDir = resolve(
     streams.cwd(),
