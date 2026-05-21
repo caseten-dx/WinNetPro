@@ -20,13 +20,13 @@ export async function runProfilesApply(
     return 2;
   }
 
-  // Per ADR-0004: --dry-run is default when stdin is not a TTY. Demo-001 only
-  // implements the dry-run path; an explicit non-dry-run path lands with the
-  // real apply pipeline in demo-002.
+  // Per ADR-0004: --dry-run is default when stdin is not a TTY. Demo-002
+  // implements the dry-run path only (same as demo-001); the explicit
+  // non-dry-run path lands with the real apply pipeline in demo-003.
   const dryRun = args.bools.has('--dry-run') || streams.stdin.isTTY !== true;
   if (!dryRun) {
     streams.stderr.write(
-      'demo-001 supports --dry-run only; the real apply pipeline lands in demo-002.\n',
+      'demo-002 supports --dry-run only; the real apply pipeline lands in demo-003.\n',
     );
     return 1;
   }

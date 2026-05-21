@@ -1,7 +1,7 @@
 // FakeProvider — default per ADR-0002. Reads adapter state from a JSON
 // fixture; never touches the OS. Mutation log exists (for future write paths
 // + the BDD assertion "the fake provider mutation log is empty") but is not
-// written to in demo-001's read-only surface.
+// written to in demo-002's read-only surface; demo-003 wires it up.
 
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';

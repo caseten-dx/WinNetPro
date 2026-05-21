@@ -35,9 +35,10 @@ export async function run(
   const parsed = parseArgs(argv);
 
   if (parsed.bools.has('--real')) {
-    // demo-001 is fake-provider-only. Surface this clearly; future demos
-    // wire in PowerShellProvider here.
-    streams.stderr.write('--real is not supported in demo-001 (CLI-only, fake provider).\n');
+    // demo-002 is fake-provider-only (same as demo-001). The real apply
+    // pipeline + WindowsProvider land in demo-003; that's where this branch
+    // wires through to PowerShellProvider.
+    streams.stderr.write('--real is not supported in demo-002 (fake provider only). Real apply lands in demo-003.\n');
     return 1;
   }
 

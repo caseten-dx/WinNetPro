@@ -6,8 +6,8 @@ import type { Adapter, Profile } from '../domain/types.js';
 export interface NetworkProvider {
   readonly kind: 'fake' | 'powershell';
   listAdapters(): Promise<Adapter[]>;
-  // Future demos add applyChangePlan + verify; demo-001 is read-only on the
-  // provider, so the surface stays minimal.
+  // Demo-003 adds applyChangePlan + verify; demo-001 and demo-002 are
+  // read-only on the provider, so the surface stays minimal.
 }
 
 export interface ProfileRepository {

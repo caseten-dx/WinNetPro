@@ -1,4 +1,4 @@
-// Tiny argv parser scoped to demo-001's surface. We deliberately do not pull
+// Tiny argv parser scoped to demo-002's CLI surface. We deliberately do not pull
 // in `commander` here (architecture doc names it but doesn't gate on it); the
 // goal is a small Node SEA bundle. Adoption of `commander` is deferred to a
 // later demo if/when the CLI surface grows.

@@ -1,4 +1,4 @@
-// Real CLI entry. Bundled into WinNetPro-CLI-demo-001.exe via Node SEA.
+// Real CLI entry. Bundled into WinNetPro-CLI-demo-002.exe via Node SEA.
 // All behavior lives in `run.ts` so tests can call the same surface in-process.
 // No top-level await — the SEA bundle is CJS and esbuild rejects TLA there.
 
