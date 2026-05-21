@@ -17,8 +17,9 @@ What landed (cumulative):
 - Local Windows VM dev surface: `scripts/bootstrap-windows.ps1` provisions a fresh Win11 ARM VM with one PowerShell line. SSH from Mac into the VM via Tailscale; repo lives at `C:\Users\mgilmore\Developer\WinNetPro` to mirror `~/Developer/WinNetPro`.
 
 Next work, in order:
-1. User smoke-tests `WinNetPro-CLI-demo-001.exe` on a Windows laptop and reports back any Windows-specific issues (path handling, fixture resolution, line endings). The local VM run already validates Windows ARM; this confirms x64 audience-target behavior.
-2. Demo-002 scoping (see Carry-forward).
+1. Demo-002 scoping (see Carry-forward).
+
+x64 smoke validation complete — `scripts/smoke-x64-cli.ps1` ran 10/10 PASS via SSH against the GH-Actions-built x64 `.exe` running under Windows-on-ARM Prism emulation on the local VM. All four exit-code lanes (0/1/2/3) verified; Windows path semantics, JSON shape, persistence across invocations, and the non-TTY auto-dry-run safety default all hold. Three non-blocker findings surfaced and rolled into Carry-forward. A native-x64-laptop pass remains optional (Prism emulation is a strong signal but not identical to native silicon); not gating demo-002.
 
 ## Carry-forward for demo-002 (do not lose)
 
@@ -26,6 +27,9 @@ Next work, in order:
 - **Real apply pipeline.** Demo-001's `FakeProvider` only exposes `listAdapters()`; `applyChangePlan` and `verify` arrive in demo-002, along with the snapshot capture / rollback flow (ADR-0004 steps 9-12) and admin detection (safety-spec invariant 4).
 - **GUI.** Demo-002+. The GH Actions wiring proves the windows-latest CI path; the GUI demo will add a parallel `.github/workflows/build-gui.yml` driven by `electron-builder` and produce `WinNetPro-GUI-demo-NNN.exe`.
 - **GH Actions runtime deprecation.** `actions/checkout@v4`, `setup-node@v4`, `upload-artifact@v4`, `pnpm/action-setup@v4` still run on Node.js 20 internally — forced upgrade by 2026-09-16. `windows-latest` redirects to `windows-2025-vs2026` by 2026-06-15. Track; not urgent for demo-002 scoping.
+- **ASCII-only human-readable CLI output (smoke-test finding 1).** `formatPlan()` in `cli/commands/profiles-apply.ts` emits U+2014 em-dash on the `dns:` and `ipv6:` lines. The .exe writes valid UTF-8 (verified at byte level: `E2 80 94`), but Windows PowerShell 5.1 + `cmd.exe` default to OEM/ANSI code pages on most installs and will mojibake the dashes. JSON output is unaffected. Cheapest fix: swap `—` for `--` in the human-readable formatter. Audit for other non-ASCII chars while we're there. ~5-line change.
+- **CLI arg parser: error on unknown positional args (smoke-test finding 2).** When `--description "lab bench"` was passed via PS 5.1 `Start-Process -ArgumentList` (which doesn't quote args with spaces), the .exe received `--description lab bench` as separate tokens. The inline parser took `lab` as the value and **silently swallowed `bench`** as an unrecognized positional. Per ADR-0009 the parser stays tiny, but silently dropping unknown positionals is a footgun — should exit 2 with a clear error. ~10-line change in `cli/args.ts`.
+- **`willChange` semantic vs. presentational disambiguation (smoke-test finding 3).** `dhcp -> dhcp (changes)` is the rendered output when applying a DHCP profile to a DHCP adapter — reads as contradictory. `willChange=true` currently means "mutation API will be called" rather than "end-state will differ." Two paths: (a) refactor `willChange` to reflect observable diff (better semantics, larger change), or (b) render `(re-apply)` vs `(changes)` vs `(no change)` in the formatter (smaller, audience-friendlier). Decide before demo-002 real-apply work locks in semantics.
 
 ## Open questions
 
