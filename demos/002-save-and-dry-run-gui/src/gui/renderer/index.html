@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Tight CSP: no inline styles, no remote anything. Phase E adds
+         tokens.css as a linked <link rel="stylesheet"> (covered by 'self'). -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'" />
+    <title>WinNetPro — demo-002 — Phase D</title>
+  </head>
+  <body>
+    <main id="root">Loading…</main>
+    <script src="./index.js"></script>
+  </body>
+</html>

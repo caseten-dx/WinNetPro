@@ -1,5 +1,13 @@
 {
   "extends": "../../tsconfig.json",
-  "compilerOptions": { "noEmit": true },
+  "compilerOptions": {
+    "noEmit": true,
+    // DOM lib is required for the renderer (src/gui/renderer/). The cost is
+    // that backend code (domain/application/infrastructure/cli/gui-main) can
+    // now reference `document`/`window` without the type checker objecting;
+    // those layers stay clean by convention (CLAUDE.md invariant 6: only the
+    // renderer touches DOM; main + preload speak Electron, not DOM).
+    "lib": ["ES2023", "DOM"]
+  },
   "include": ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts"]
 }

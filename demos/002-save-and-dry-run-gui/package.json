@@ -6,6 +6,8 @@
   "scripts": {
     "test": "tsx --test tests/**/*.test.ts",
     "typecheck": "tsc --noEmit",
+    "bundle:gui": "node ../../scripts/build-gui-dev.mjs 002 save-and-dry-run-gui",
+    "dev:gui": "pnpm bundle:gui && electron dist/gui/main.cjs",
     "build:cli": "node ../../scripts/build-cli-sea.mjs 002 save-and-dry-run-gui",
     "build:gui": "node ../../scripts/build-gui-electron.mjs 002 save-and-dry-run-gui",
     "check": "pnpm typecheck && pnpm test"
@@ -15,6 +17,8 @@
     "tsx": "^4.19.0",
     "@types/node": "^22.0.0",
     "esbuild": "^0.24.0",
-    "postject": "^1.0.0-alpha.6"
+    "postject": "^1.0.0-alpha.6",
+    "electron": "^32.0.0",
+    "electron-builder": "^25.0.0"
   }
 }
