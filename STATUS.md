@@ -6,7 +6,7 @@
 
 ## Current focus
 
-Active demo: **`demos/001-save-and-dry-run-cli/`** until smoke-test feedback comes back from Windows; then demo-002.
+Active demo: **`demos/002-save-and-dry-run-gui/`** — scaffold landed, design hand-off committed under `docs/research/demo-002-gui-design-handoff/`, implementation next. Demo-001 is closed-out and validated (x64 .exe smoke 10/10 PASS via Mac→VM Prism emulation).
 
 What landed (cumulative):
 - `src/` tree: `domain/` (types, validation, matching per ADR-0006, profile-id), `application/` (ports, `SaveProfile`, `BuildDryRunPlan`), `infrastructure/` (`FakeProvider`, `JsonProfileRepository`, `SystemClock` + `fixedClock`), `cli/` (`run()` canonical surface, `index.ts` real entry, tiny inline arg parser per ADR-0009, `profiles save` + `profiles apply` commands).
