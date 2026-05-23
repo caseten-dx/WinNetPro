@@ -16,8 +16,8 @@
 //   renderer/index.html        — copied verbatim from src/gui/renderer/
 //   renderer/index.js          — bundled renderer (browser target, IIFE)
 
-import { existsSync, mkdirSync, copyFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { existsSync, mkdirSync, copyFileSync, readdirSync } from 'node:fs';
+import { resolve, dirname, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
@@ -85,21 +85,36 @@ await esbuild.build({
 });
 
 // renderer: browser target, IIFE so the <script> tag works without modules.
+// jsx: 'automatic' uses the react/jsx-runtime path (no React import needed in
+// .tsx files). loader maps both .ts and .tsx so renderer/index.tsx + its
+// component tree bundle in one pass.
 await esbuild.build({
-  entryPoints: [resolve(guiDir, 'renderer/index.ts')],
+  entryPoints: [resolve(guiDir, 'renderer/index.tsx')],
   bundle: true,
   platform: 'browser',
   target: 'es2022',
   format: 'iife',
+  jsx: 'automatic',
+  jsxDev: false,
+  loader: { '.ts': 'ts', '.tsx': 'tsx' },
   outfile: resolve(distRenderer, 'index.js'),
   legalComments: 'none',
   logLevel: 'warning',
 });
 
-copyFileSync(
-  resolve(guiDir, 'renderer/index.html'),
-  resolve(distRenderer, 'index.html'),
-);
+// Copy renderer assets (HTML + CSS) verbatim. Phase E1 ships tokens.css from
+// the design hand-off as the renderer's single stylesheet; later phases may
+// add more .css files alongside it (or pivot to esbuild's CSS bundler — we
+// avoid that for now to keep the renderer's CSP simple).
+for (const entry of readdirSync(resolve(guiDir, 'renderer'))) {
+  const ext = extname(entry).toLowerCase();
+  if (ext === '.html' || ext === '.css') {
+    copyFileSync(
+      resolve(guiDir, 'renderer', entry),
+      resolve(distRenderer, entry),
+    );
+  }
+}
 
 const dt = Date.now() - t0;
 console.error(`[build-gui-dev] dist/gui/ ready (built in ${(dt / 1000).toFixed(1)}s)`);

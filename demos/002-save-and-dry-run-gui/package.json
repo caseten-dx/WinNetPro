@@ -5,17 +5,23 @@
   "type": "module",
   "scripts": {
     "test": "tsx --test tests/**/*.test.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.renderer.json",
     "bundle:gui": "node ../../scripts/build-gui-dev.mjs 002 save-and-dry-run-gui",
     "dev:gui": "pnpm bundle:gui && electron dist/gui/main.cjs",
     "build:cli": "node ../../scripts/build-cli-sea.mjs 002 save-and-dry-run-gui",
     "build:gui": "node ../../scripts/build-gui-electron.mjs 002 save-and-dry-run-gui",
     "check": "pnpm typecheck && pnpm test"
   },
+  "dependencies": {
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
+  },
   "devDependencies": {
     "typescript": "^5.6.0",
     "tsx": "^4.19.0",
     "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
     "esbuild": "^0.24.0",
     "postject": "^1.0.0-alpha.6",
     "electron": "^32.0.0",

@@ -21,11 +21,6 @@ import { systemClock } from '../infrastructure/system-clock.js';
 import { createIpcHandlers } from './ipc-handlers.js';
 import { IPC_CHANNELS } from './api-types.js';
 
-// esbuild's CJS output exposes __dirname at runtime; this declaration keeps
-// the TypeScript compiler happy under lib: ["ES2023", "DOM"] without enabling
-// the @types/node CJS globals everywhere.
-declare const __dirname: string;
-
 // CWD-relative config + fixture dirs mirror the CLI defaults (cli/run.ts).
 // Phase G's packaged .exe will resolve these against a writable user-data
 // path instead; for Phase D dev (`pnpm dev:gui`), launching from the demo

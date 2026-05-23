@@ -2,13 +2,14 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <!-- Tight CSP: no inline styles, no remote anything. Phase E adds
-         tokens.css as a linked <link rel="stylesheet"> (covered by 'self'). -->
+    <!-- Tight CSP: no inline styles, no remote anything. tokens.css is the
+         renderer's single stylesheet (covered by 'self'). -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'" />
-    <title>WinNetPro — demo-002 — Phase D</title>
+    <title>WinNetPro</title>
+    <link rel="stylesheet" href="./tokens.css" />
   </head>
   <body>
-    <main id="root">Loading…</main>
+    <div id="root"></div>
     <script src="./index.js"></script>
   </body>
 </html>
